@@ -68,11 +68,9 @@ class UserController {
   async update(req, res) {
     try {
       const schema = Yup.object().shape({
-        name: Yup.string().required(),
-        email: Yup.string()
-          .email()
-          .required(),
-        phone: Yup.number().required(),
+        name: Yup.string(),
+        email: Yup.string().email(),
+        phone: Yup.number(),
         oldPassword: Yup.string().min(6),
         password: Yup.string()
           .min(6)
