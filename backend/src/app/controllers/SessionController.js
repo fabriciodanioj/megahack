@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import * as Yup from 'yup';
+import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import authConfig from '../../config/auth';
 
@@ -19,7 +20,7 @@ class SessionController {
 
       const { email, password } = req.body;
 
-      const user = await User.findOne({ where: { email } });
+      const user = await User.findOne({ email }).select('+password_hash');
 
       if (!user) {
         return res.status(401).send({
@@ -27,8 +28,10 @@ class SessionController {
         });
       }
 
-      if (!(await user.checkPassword(password))) {
-        return res.status(401).send({ error: 'Password does not match' });
+      const verify = bcrypt.compareSync(password, user.password_hash);
+
+      if (!verify) {
+        return res.status(400).send({ error: 'Password does not match' });
       }
 
       const { id, name } = user;

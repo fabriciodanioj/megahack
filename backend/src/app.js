@@ -1,13 +1,17 @@
+import 'dotenv/config';
+
 import express from 'express';
+import { connect, set } from 'mongoose';
 import cors from 'cors';
+
 import routes from './routes';
-import './database';
 
 class App {
   constructor() {
     this.server = express();
 
     this.middlewares();
+    this.database();
     this.routes();
   }
 
@@ -18,6 +22,15 @@ class App {
 
   routes() {
     this.server.use(routes);
+  }
+
+  database() {
+    connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      useFindAndModify: false,
+    });
+    set('useCreateIndex', true);
   }
 }
 

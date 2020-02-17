@@ -1,7 +1,20 @@
 import * as Yup from 'yup';
+import bcrypt from 'bcryptjs';
+import Totalvoice from 'totalvoice-node';
 import User from '../models/User';
 
+const client = new Totalvoice(process.env.APIKEY_SMS);
+
 class UserController {
+  async index(req, res) {
+    try {
+      const users = await User.find();
+      return res.status(200).send(users);
+    } catch (err) {
+      return res.status(400).send({ error: 'Failed to show users' });
+    }
+  }
+
   async store(req, res) {
     try {
       const schema = Yup.object().shape({
@@ -9,9 +22,8 @@ class UserController {
         email: Yup.string()
           .email()
           .required(),
-        phone: Yup.number().required(),
-        document: Yup.number().required(),
-        date_of_birth: Yup.string().required(),
+        phone: Yup.string().required(),
+        document: Yup.string().required(),
         password: Yup.string()
           .required()
           .min(6),
@@ -22,21 +34,39 @@ class UserController {
       }
 
       const user = await User.findOne({
-        where: {
-          email: req.body.email,
-        },
+        email: req.body.email,
       });
 
       if (user) {
         return res.status(400).send({ error: 'This user already exists' });
       }
 
-      const { id, name, email } = await User.create(req.body);
+      const salt = bcrypt.genSaltSync(10);
+
+      const password_hash = bcrypt.hashSync(req.body.password, salt);
+
+      const token = Math.floor(Math.random() * 65536);
+
+      const { id, name, email } = await User.create({
+        ...req.body,
+        password_hash,
+        token,
+      });
+
+      await client.sms
+        .enviar(req.body.phone, `${token}`)
+        .then(data => {
+          return console.log(data);
+        })
+        .catch(error => {
+          return console.error(error);
+        });
 
       return res.status(201).send({
         id,
         name,
         email,
+        token,
       });
     } catch (err) {
       return res.send({
@@ -50,70 +80,19 @@ class UserController {
 
   async delete(req, res) {
     try {
-      await User.destroy({
-        where: { id: req.userId },
-      });
+      const { id } = req.params;
+      const user = await User.findByIdAndRemove(id);
 
-      return res.send();
+      if (!user) {
+        return res.status(400).send({ msg: `User not exists` });
+      }
+
+      return res.status(200).send({ msg: `User with id: ${id} was deleted` });
     } catch (err) {
       return res.send({
         error: {
           title: 'Delete user failed',
           messages: err,
-        },
-      });
-    }
-  }
-
-  async update(req, res) {
-    try {
-      const schema = Yup.object().shape({
-        name: Yup.string(),
-        email: Yup.string().email(),
-        phone: Yup.number(),
-        oldPassword: Yup.string().min(6),
-        password: Yup.string()
-          .min(6)
-          .when('oldPassword', (oldPassword, field) =>
-            oldPassword ? field.required() : field
-          ),
-        confirmPassword: Yup.string().when('password', (password, field) =>
-          password ? field.required().oneOf([Yup.ref('password')]) : field
-        ),
-      });
-
-      if (!(await schema.isValid(req.body))) {
-        return res.status(400).send({ error: 'Validation fails' });
-      }
-
-      const { email, oldPassword } = req.body;
-
-      const user = await User.findByPk(req.userId);
-
-      if (email && email !== user.email) {
-        const userExists = await User.findOne({ where: { email } });
-
-        if (userExists) {
-          return res.status(400).send({ error: 'This user already exists' });
-        }
-      }
-
-      if (oldPassword && !(await user.checkPassword(oldPassword))) {
-        return res.status(401).send({ error: 'Password does not match' });
-      }
-
-      const { id, name, phone } = await user.update(req.body);
-
-      return res.status(201).send({
-        id,
-        name,
-        email,
-        phone,
-      });
-    } catch (err) {
-      return res.send({
-        error: {
-          title: 'Update user failed',
         },
       });
     }
